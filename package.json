@@ -1,0 +1,26 @@
+{
+  "name": "cli-pretty-errors",
+  "version": "0.1.0",
+  "description": "Clean, readable, and actionable terminal error formatting for Node.js",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {},
+  "keywords": [
+    "error",
+    "cli",
+    "pretty-error",
+    "stacktrace",
+    "terminal",
+    "format",
+    "troubleshooting"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
