@@ -1,5 +1,7 @@
 /**
  * Entry point for cli-pretty-errors.
- * Exposes core formatting functions and optional process hook installers.
  */
 
+export { parseError } from './parser/index.js';
+export { parseStackTrace, parseStackFrame } from './parser/stack.js';
+export { isSystemError, extractSystemInfo } from './parser/system.js';
