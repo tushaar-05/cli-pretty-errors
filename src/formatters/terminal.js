@@ -4,6 +4,7 @@
  */
 
 import { createStyler } from '../utils/terminal.js';
+import { getDiagnostic } from '../hints/index.js';
 
 /**
  * Formats a key-value detail line with aligned labels.
@@ -181,6 +182,43 @@ function renderStackFrames(frames, styler, options = {}) {
 }
 
 /**
+ * Renders diagnostic explanation, likely cause, and actionable suggestions.
+ *
+ * @param {object} diagnostic - Diagnostic result from getDiagnostic
+ * @param {object} styler - Styler instance
+ * @returns {string}
+ */
+function renderDiagnostic(diagnostic, styler) {
+  if (!diagnostic || typeof diagnostic !== 'object') {
+    return '';
+  }
+
+  const lines = [];
+
+  // Title / Diagnosis header
+  const title = diagnostic.title ? ` ${diagnostic.title}` : '';
+  lines.push(`  ${styler.bold(styler.yellow(`💡 Diagnosis:${title}`))}`);
+
+  // Explanation or likely cause
+  if (diagnostic.likelyCause) {
+    lines.push(`    ${diagnostic.likelyCause}`);
+  } else if (diagnostic.explanation) {
+    lines.push(`    ${diagnostic.explanation}`);
+  }
+
+  // Suggestions list
+  if (Array.isArray(diagnostic.suggestions) && diagnostic.suggestions.length > 0) {
+    lines.push('');
+    lines.push(`    ${styler.bold(styler.gray('Suggestions:'))}`);
+    for (const item of diagnostic.suggestions) {
+      lines.push(`      ${styler.cyan('•')} ${item}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Indents a multi-line string by a specified prefix.
  *
  * @param {string} text
@@ -203,6 +241,9 @@ function indentBlock(text, prefix = '  │ ') {
  * @param {object} [options]
  * @param {boolean} [options.color] - Override color support (true/false)
  * @param {number} [options.maxFrames=50] - Maximum stack frames to display
+ * @param {boolean} [options.hints=true] - Whether to include diagnostic suggestions
+ * @param {boolean} [options.diagnostics=true] - Alias for options.hints
+ * @param {object|null} [options.diagnostic] - Pre-computed diagnostic result override
  * @param {number} [options._depth=0] - Internal recursion depth
  * @returns {string}
  */
@@ -234,7 +275,21 @@ export function formatTerminal(error, options = {}) {
     sections.push(stack);
   }
 
-  // 4. Nested Cause
+  // 4. Diagnostic Suggestions (if available and enabled)
+  const showHints = options.hints !== false && options.diagnostics !== false;
+  const diagnostic =
+    options.diagnostic !== undefined && depth === 0
+      ? options.diagnostic
+      : (showHints ? getDiagnostic(error, options) : null);
+
+  if (diagnostic) {
+    const diagBlock = renderDiagnostic(diagnostic, styler).trimEnd();
+    if (diagBlock) {
+      sections.push(diagBlock);
+    }
+  }
+
+  // 5. Nested Cause
   if (error.cause) {
     const causeHeader = `  ${styler.yellow('╰─ Caused by:')}`;
     const formattedCause = formatTerminal(error.cause, {
@@ -244,7 +299,7 @@ export function formatTerminal(error, options = {}) {
     sections.push(`${causeHeader}\n${indentBlock(formattedCause.trim(), '     │ ')}`);
   }
 
-  // 5. AggregateError Nested Errors
+  // 6. AggregateError Nested Errors
   if (Array.isArray(error.errors) && error.errors.length > 0) {
     const count = error.errors.length;
     const aggHeader = `  ${styler.yellow(`Aggregate Errors (${count}):`)}`;
