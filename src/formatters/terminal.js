@@ -6,6 +6,14 @@
 import { createStyler } from '../utils/terminal.js';
 import { getDiagnostic } from '../hints/index.js';
 
+const DEFAULT_THEME = {
+  badgeBg: 'bgRed',
+  badgeFg: 'white',
+  bulletUser: '●',
+  bulletInternal: '○',
+  hintIcon: '💡'
+};
+
 /**
  * Formats a key-value detail line with aligned labels.
  *
@@ -25,11 +33,12 @@ function formatDetailLine(label, value, styler, labelWidth = 12) {
  *
  * @param {object} error - Normalized error model
  * @param {object} styler - Styler instance
+ * @param {object} theme - Theme configuration
  * @returns {string}
  */
-function renderHeader(error, styler) {
+function renderHeader(error, styler, theme) {
   const badgeName = error.name || 'ERROR';
-  const badge = styler.badge(badgeName, 'bgRed', 'white');
+  const badge = styler.badge(badgeName, theme.badgeBg || 'bgRed', theme.badgeFg || 'white');
 
   const codeTag = error.code ? ` ${styler.gray(`[${error.code}]`)}` : '';
   const headerPrefix = `${badge}${codeTag}`;
@@ -60,13 +69,14 @@ function renderHeader(error, styler) {
  *
  * @param {object} error - Normalized error model
  * @param {object} styler - Styler instance
+ * @param {object} options - Formatting options
  * @returns {string}
  */
-function renderMetadata(error, styler) {
+function renderMetadata(error, styler, options) {
   const lines = [];
 
-  // Primary origin location
-  if (error.origin?.file) {
+  // Primary origin location (can be disabled via options.location: false)
+  if (options.location !== false && error.origin?.file) {
     const file = styler.cyan(error.origin.file);
     const line = error.origin.line !== null ? `:${styler.yellow(error.origin.line)}` : '';
     const col = error.origin.column !== null ? `:${styler.yellow(error.origin.column)}` : '';
@@ -133,11 +143,15 @@ function renderMetadata(error, styler) {
  *
  * @param {Array<object>} frames - Parsed stack frames
  * @param {object} styler - Styler instance
- * @param {object} [options]
- * @param {number} [options.maxFrames=50]
+ * @param {object} options - Formatting options
+ * @param {object} theme - Theme configuration
  * @returns {string}
  */
-function renderStackFrames(frames, styler, options = {}) {
+function renderStackFrames(frames, styler, options = {}, theme) {
+  if (options.stack === false) {
+    return '';
+  }
+
   if (!Array.isArray(frames) || frames.length === 0) {
     return '';
   }
@@ -147,11 +161,14 @@ function renderStackFrames(frames, styler, options = {}) {
 
   const lines = [`  ${styler.bold(styler.gray('Stack Trace:'))}`];
 
+  const userBullet = theme.bulletUser || '●';
+  const internalBullet = theme.bulletInternal || '○';
+
   for (const frame of displayedFrames) {
     const isUser = frame.isUserCode;
 
     // Bullet indicator: bold red for user code, dim gray for internals/node_modules
-    const bullet = isUser ? styler.red('●') : styler.gray('○');
+    const bullet = isUser ? styler.red(userBullet) : styler.gray(internalBullet);
 
     // Callee
     const callee = frame.callee || '<anonymous>';
@@ -186,18 +203,19 @@ function renderStackFrames(frames, styler, options = {}) {
  *
  * @param {object} diagnostic - Diagnostic result from getDiagnostic
  * @param {object} styler - Styler instance
+ * @param {object} theme - Theme configuration
  * @returns {string}
  */
-function renderDiagnostic(diagnostic, styler) {
+function renderDiagnostic(diagnostic, styler, theme) {
   if (!diagnostic || typeof diagnostic !== 'object') {
     return '';
   }
 
   const lines = [];
 
-  // Title / Diagnosis header
+  const icon = theme.hintIcon || '💡';
   const title = diagnostic.title ? ` ${diagnostic.title}` : '';
-  lines.push(`  ${styler.bold(styler.yellow(`💡 Diagnosis:${title}`))}`);
+  lines.push(`  ${styler.bold(styler.yellow(`${icon} Diagnosis:${title}`))}`);
 
   // Explanation or likely cause
   if (diagnostic.likelyCause) {
@@ -241,8 +259,11 @@ function indentBlock(text, prefix = '  │ ') {
  * @param {object} [options]
  * @param {boolean} [options.color] - Override color support (true/false)
  * @param {number} [options.maxFrames=50] - Maximum stack frames to display
+ * @param {boolean} [options.stack=true] - Whether to include the stack trace section
+ * @param {boolean} [options.location=true] - Whether to include the source location line
  * @param {boolean} [options.hints=true] - Whether to include diagnostic suggestions
  * @param {boolean} [options.diagnostics=true] - Alias for options.hints
+ * @param {object} [options.theme] - Custom theme overrides
  * @param {object|null} [options.diagnostic] - Pre-computed diagnostic result override
  * @param {number} [options._depth=0] - Internal recursion depth
  * @returns {string}
@@ -253,24 +274,28 @@ export function formatTerminal(error, options = {}) {
   }
 
   const styler = createStyler({ enabled: options.color });
+  const theme = {
+    ...DEFAULT_THEME,
+    ...(options.theme || {})
+  };
   const depth = options._depth ?? 0;
 
   const sections = [];
 
   // 1. Header (Badge, Code, Message)
-  const header = renderHeader(error, styler).trimEnd();
+  const header = renderHeader(error, styler, theme).trimEnd();
   if (header) {
     sections.push(header);
   }
 
   // 2. Metadata (Location, Category, System Info, Custom Properties)
-  const meta = renderMetadata(error, styler).trimEnd();
+  const meta = renderMetadata(error, styler, options).trimEnd();
   if (meta) {
     sections.push(meta);
   }
 
   // 3. Stack Trace
-  const stack = renderStackFrames(error.frames, styler, options).trimEnd();
+  const stack = renderStackFrames(error.frames, styler, options, theme).trimEnd();
   if (stack) {
     sections.push(stack);
   }
@@ -283,7 +308,7 @@ export function formatTerminal(error, options = {}) {
       : (showHints ? getDiagnostic(error, options) : null);
 
   if (diagnostic) {
-    const diagBlock = renderDiagnostic(diagnostic, styler).trimEnd();
+    const diagBlock = renderDiagnostic(diagnostic, styler, theme).trimEnd();
     if (diagBlock) {
       sections.push(diagBlock);
     }

@@ -1,5 +1,6 @@
 /**
- * Entry point for cli-pretty-errors.
+ * cli-pretty-errors
+ * Clean, readable, and actionable terminal error formatting for Node.js.
  */
 
 import { parseError } from './parser/index.js';
@@ -23,28 +24,69 @@ function isNormalized(val) {
 }
 
 /**
- * Formats any thrown value or error into a clean, human-readable terminal output
- * with actionable troubleshooting diagnostics.
+ * Formats any error or thrown value into a clean, human-readable terminal string
+ * without printing it to the console.
  *
- * @param {unknown} error - Error instance, thrown value, or normalized error model.
+ * Ideal for passing to custom loggers (Winston, Pino, Bunyan) or inspecting in tests.
+ *
+ * @param {unknown} error - Error instance, thrown primitive/object, or normalized error model.
  * @param {object} [options]
- * @param {boolean} [options.color] - Override terminal color output (true/false).
+ * @param {boolean} [options.color] - Override terminal color output (defaults to auto-detected/NO_COLOR).
  * @param {number} [options.maxFrames=50] - Maximum stack frames to display.
- * @param {boolean} [options.hints=true] - Whether to display troubleshooting diagnostics.
+ * @param {boolean} [options.stack=true] - Whether to include the stack trace section.
+ * @param {boolean} [options.location=true] - Whether to include the primary source location line.
+ * @param {boolean} [options.hints=true] - Whether to include actionable troubleshooting suggestions.
  * @param {boolean} [options.diagnostics=true] - Alias for options.hints.
+ * @param {object} [options.theme] - Custom theme overrides (badgeBg, bulletUser, hintIcon, etc.).
  * @returns {string} Formatted terminal string.
  */
-export function prettyError(error, options = {}) {
+export function formatError(error, options = {}) {
   const normalized = isNormalized(error) ? error : parseError(error, options);
   return formatTerminal(normalized, options);
 }
 
-// Alias for convenience
-export const formatError = prettyError;
+/**
+ * Formats any error or thrown value and writes it directly to stderr (or a custom stream).
+ * Also returns the formatted string for convenience.
+ *
+ * Ideal for CLI applications, global error handlers, and interactive dev servers.
+ *
+ * @param {unknown} error - Error instance, thrown primitive/object, or normalized error model.
+ * @param {object} [options]
+ * @param {boolean} [options.color] - Override terminal color output (defaults to auto-detected/NO_COLOR).
+ * @param {number} [options.maxFrames=50] - Maximum stack frames to display.
+ * @param {boolean} [options.stack=true] - Whether to include the stack trace section.
+ * @param {boolean} [options.location=true] - Whether to include the primary source location line.
+ * @param {boolean} [options.hints=true] - Whether to include actionable troubleshooting suggestions.
+ * @param {boolean} [options.diagnostics=true] - Alias for options.hints.
+ * @param {object} [options.theme] - Custom theme overrides.
+ * @param {boolean} [options.print=true] - Whether to write the formatted error to output.
+ * @param {NodeJS.WritableStream} [options.stream=process.stderr] - Stream to write output to.
+ * @returns {string} Formatted terminal string.
+ */
+export function prettyError(error, options = {}) {
+  const formatted = formatError(error, options);
 
-// Re-export modular components for advanced or low-level usage
+  if (options.print !== false) {
+    const stream = options.stream || process.stderr;
+    if (typeof stream?.write === 'function') {
+      stream.write(`${formatted}\n`);
+    } else {
+      console.error(formatted);
+    }
+  }
+
+  return formatted;
+}
+
+// Low-level modular exports for advanced or specialized usage
 export { parseError } from './parser/index.js';
 export { parseStackTrace, parseStackFrame } from './parser/stack.js';
 export { isSystemError, extractSystemInfo } from './parser/system.js';
 export { formatTerminal } from './formatters/terminal.js';
-export { getDiagnostic, registerDiagnosticRule, resetDiagnosticRules, getAllDiagnosticRules } from './hints/index.js';
+export {
+  getDiagnostic,
+  registerDiagnosticRule,
+  resetDiagnosticRules,
+  getAllDiagnosticRules
+} from './hints/index.js';
