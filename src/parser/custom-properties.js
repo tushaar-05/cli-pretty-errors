@@ -16,7 +16,11 @@ const EXCLUDED_PROPERTIES = new Set([
   'dest',
   'address',
   'port',
-  'constructor'
+  'constructor',
+  'prototype',
+  'length',
+  'arguments',
+  'caller'
 ]);
 
 /**
@@ -26,15 +30,20 @@ const EXCLUDED_PROPERTIES = new Set([
  * @returns {Record<string, unknown>}
  */
 export function extractCustomProperties(err) {
-  if (!err || typeof err !== 'object') {
+  if (!err || (typeof err !== 'object' && typeof err !== 'function')) {
     return {};
   }
 
   const custom = {};
   const visited = new Set([err]);
 
-  // Read own enumerable properties as well as non-enumerable own properties if standard
-  const keys = Object.getOwnPropertyNames(err);
+  // Read own property names safely
+  let keys = [];
+  try {
+    keys = Object.getOwnPropertyNames(err);
+  } catch {
+    return {};
+  }
 
   for (const key of keys) {
     if (EXCLUDED_PROPERTIES.has(key)) {
@@ -76,4 +85,3 @@ export function extractCustomProperties(err) {
 
   return custom;
 }
-

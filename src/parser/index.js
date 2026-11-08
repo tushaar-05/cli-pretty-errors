@@ -192,24 +192,35 @@ export function parseError(input, options = {}) {
   currentVisited.add(input);
 
   const isInstance = input instanceof Error;
+  const isFunction = inputType === 'function';
   const isAggregate = (typeof AggregateError !== 'undefined' && input instanceof AggregateError) || input.name === 'AggregateError';
 
-  // Extract name and message
+  // Extract name
   let name = 'Error';
   if (typeof input.name === 'string' && input.name.trim()) {
     name = input.name;
   } else if (isInstance && input.constructor?.name) {
     name = input.constructor.name;
+  } else if (isFunction) {
+    name = 'ThrownFunction';
   } else if (!isInstance) {
     name = 'ThrownObject';
   }
 
+  // Extract message safely (guaranteed to be a string)
   let message = '';
   if (typeof input.message === 'string') {
     message = input.message;
+  } else if (input.message !== undefined && input.message !== null) {
+    try {
+      message = String(input.message);
+    } catch {
+      message = '';
+    }
   } else if (!isInstance) {
     try {
-      message = JSON.stringify(input);
+      const json = JSON.stringify(input);
+      message = typeof json === 'string' && json !== undefined ? json : String(input);
     } catch {
       message = String(input);
     }
@@ -251,18 +262,20 @@ export function parseError(input, options = {}) {
     });
   }
 
-  // Handle AggregateError sub-errors
+  // Handle AggregateError sub-errors (supports Array and any Iterable)
   const errors = [];
-  if (Array.isArray(input.errors)) {
-    for (const subErr of input.errors) {
-      errors.push(
-        parseError(subErr, {
-          maxDepth,
-          _depth: depth + 1,
-          _visited: currentVisited
-        })
-      );
-    }
+  const rawErrors = Array.isArray(input.errors)
+    ? input.errors
+    : (isAggregate && input.errors && typeof input.errors[Symbol.iterator] === 'function' ? Array.from(input.errors) : []);
+
+  for (const subErr of rawErrors) {
+    errors.push(
+      parseError(subErr, {
+        maxDepth,
+        _depth: depth + 1,
+        _visited: currentVisited
+      })
+    );
   }
 
   // Extract custom non-standard properties

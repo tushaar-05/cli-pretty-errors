@@ -4,6 +4,11 @@
  */
 
 import { fileURLToPath } from 'node:url';
+import { builtinModules } from 'node:module';
+
+const NODE_BUILTIN_FILES = new Set(
+  builtinModules.flatMap((m) => [m, `${m}.js`, `node:${m}`])
+);
 
 /**
  * Normalizes a file path or URL string.
@@ -33,8 +38,10 @@ function checkIsInternal(file) {
   if (!file) return false;
   if (file.startsWith('node:')) return true;
   if (file.startsWith('internal/') || file.includes('/internal/') || file.includes('\\internal\\')) return true;
-  // Pre-node: prefix builtins like "events.js:12:34" or "fs.js"
-  if (!file.includes('/') && !file.includes('\\') && file.endsWith('.js')) return true;
+  // Builtin modules without node: prefix (e.g. events.js, fs.js)
+  if (!file.includes('/') && !file.includes('\\') && NODE_BUILTIN_FILES.has(file)) {
+    return true;
+  }
   return false;
 }
 

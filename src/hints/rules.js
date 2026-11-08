@@ -14,7 +14,10 @@ function extractPath(error) {
   if (error.system?.path) {
     return error.system.path;
   }
-  const match = error.message?.match(/(?:open|stat|access|read|unlink|mkdir)\s+'([^']+)'/i);
+  if (typeof error.message !== 'string') {
+    return null;
+  }
+  const match = error.message.match(/(?:open|stat|access|read|unlink|mkdir)\s+'([^']+)'/i);
   return match ? match[1] : null;
 }
 
@@ -32,7 +35,11 @@ function extractEndpoint(error) {
     return { address, port };
   }
 
-  const match = error.message?.match(/(?:connect|listen)\s+[A-Z0-9_]+(?:\s+([^\s:]+))?:(\d+)/i);
+  if (typeof error.message !== 'string') {
+    return { address: null, port: null };
+  }
+
+  const match = error.message.match(/(?:connect|listen)\s+[A-Z0-9_]+(?:\s+([^\s:]+))?:(\d+)/i);
   if (match) {
     return {
       address: match[1] || null,

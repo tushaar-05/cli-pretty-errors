@@ -15,6 +15,33 @@ const DEFAULT_THEME = {
 };
 
 /**
+ * Safely serializes values into strings for terminal display,
+ * gracefully handling BigInts and circular object structures.
+ *
+ * @param {unknown} val
+ * @returns {string}
+ */
+function safeSerialize(val) {
+  if (typeof val === 'bigint') return `${val}n`;
+  if (typeof val === 'symbol') return val.toString();
+  if (typeof val !== 'object' || val === null) return String(val);
+
+  const seen = new WeakSet();
+  try {
+    return JSON.stringify(val, (key, value) => {
+      if (typeof value === 'bigint') return `${value}n`;
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) return '[Circular]';
+        seen.add(value);
+      }
+      return value;
+    });
+  } catch {
+    return String(val);
+  }
+}
+
+/**
  * Formats a key-value detail line with aligned labels.
  *
  * @param {string} label
@@ -120,16 +147,7 @@ function renderMetadata(error, styler, options) {
   if (customKeys.length > 0) {
     for (const key of customKeys) {
       const val = error.customProperties[key];
-      let valStr;
-      if (typeof val === 'object' && val !== null) {
-        try {
-          valStr = JSON.stringify(val);
-        } catch {
-          valStr = String(val);
-        }
-      } else {
-        valStr = String(val);
-      }
+      const valStr = safeSerialize(val);
       lines.push(formatDetailLine(key, styler.magenta(valStr), styler));
     }
   }
@@ -156,7 +174,7 @@ function renderStackFrames(frames, styler, options = {}, theme) {
     return '';
   }
 
-  const maxFrames = options.maxFrames ?? 50;
+  const maxFrames = typeof options.maxFrames === 'number' && options.maxFrames >= 0 ? options.maxFrames : 50;
   const displayedFrames = frames.slice(0, maxFrames);
 
   const lines = [`  ${styler.bold(styler.gray('Stack Trace:'))}`];
@@ -187,7 +205,7 @@ function renderStackFrames(frames, styler, options = {}, theme) {
       locFormatted = `${filePart}${linePart}${colPart}`;
     }
 
-    lines.push(`    ${bullet} ${calleeFormatted}  ${locFormatted}`);
+    lines.push(`    ${bullet} ${calleeFormatted}  ${locFormatted}`.trimEnd());
   }
 
   if (frames.length > maxFrames) {
@@ -273,12 +291,14 @@ export function formatTerminal(error, options = {}) {
     return '';
   }
 
-  const styler = createStyler({ enabled: options.color });
+  const validOptions = options && typeof options === 'object' ? options : {};
+
+  const styler = createStyler({ enabled: validOptions.color });
   const theme = {
     ...DEFAULT_THEME,
-    ...(options.theme || {})
+    ...(validOptions.theme && typeof validOptions.theme === 'object' ? validOptions.theme : {})
   };
-  const depth = options._depth ?? 0;
+  const depth = validOptions._depth ?? 0;
 
   const sections = [];
 
@@ -289,23 +309,23 @@ export function formatTerminal(error, options = {}) {
   }
 
   // 2. Metadata (Location, Category, System Info, Custom Properties)
-  const meta = renderMetadata(error, styler, options).trimEnd();
+  const meta = renderMetadata(error, styler, validOptions).trimEnd();
   if (meta) {
     sections.push(meta);
   }
 
   // 3. Stack Trace
-  const stack = renderStackFrames(error.frames, styler, options, theme).trimEnd();
+  const stack = renderStackFrames(error.frames, styler, validOptions, theme).trimEnd();
   if (stack) {
     sections.push(stack);
   }
 
   // 4. Diagnostic Suggestions (if available and enabled)
-  const showHints = options.hints !== false && options.diagnostics !== false;
+  const showHints = validOptions.hints !== false && validOptions.diagnostics !== false;
   const diagnostic =
-    options.diagnostic !== undefined && depth === 0
-      ? options.diagnostic
-      : (showHints ? getDiagnostic(error, options) : null);
+    validOptions.diagnostic !== undefined && depth === 0
+      ? validOptions.diagnostic
+      : (showHints ? getDiagnostic(error, validOptions) : null);
 
   if (diagnostic) {
     const diagBlock = renderDiagnostic(diagnostic, styler, theme).trimEnd();
@@ -318,7 +338,7 @@ export function formatTerminal(error, options = {}) {
   if (error.cause) {
     const causeHeader = `  ${styler.yellow('╰─ Caused by:')}`;
     const formattedCause = formatTerminal(error.cause, {
-      ...options,
+      ...validOptions,
       _depth: depth + 1
     });
     sections.push(`${causeHeader}\n${indentBlock(formattedCause.trim(), '     │ ')}`);
@@ -333,7 +353,7 @@ export function formatTerminal(error, options = {}) {
     error.errors.forEach((subErr, idx) => {
       const itemHeader = `  ${styler.gray(`[${idx + 1}/${count}]`)}`;
       const formattedSub = formatTerminal(subErr, {
-        ...options,
+        ...validOptions,
         _depth: depth + 1
       });
       aggBlocks.push(`${itemHeader}\n${indentBlock(formattedSub.trim(), '     │ ')}`);

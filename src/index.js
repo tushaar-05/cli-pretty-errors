@@ -41,8 +41,9 @@ function isNormalized(val) {
  * @returns {string} Formatted terminal string.
  */
 export function formatError(error, options = {}) {
-  const normalized = isNormalized(error) ? error : parseError(error, options);
-  return formatTerminal(normalized, options);
+  const validOptions = options && typeof options === 'object' ? options : {};
+  const normalized = isNormalized(error) ? error : parseError(error, validOptions);
+  return formatTerminal(normalized, validOptions);
 }
 
 /**
@@ -65,14 +66,19 @@ export function formatError(error, options = {}) {
  * @returns {string} Formatted terminal string.
  */
 export function prettyError(error, options = {}) {
-  const formatted = formatError(error, options);
+  const validOptions = options && typeof options === 'object' ? options : {};
+  const formatted = formatError(error, validOptions);
 
-  if (options.print !== false) {
-    const stream = options.stream || process.stderr;
-    if (typeof stream?.write === 'function') {
-      stream.write(`${formatted}\n`);
-    } else {
-      console.error(formatted);
+  if (validOptions.print !== false) {
+    const stream = validOptions.stream || process.stderr;
+    try {
+      if (typeof stream?.write === 'function') {
+        stream.write(`${formatted}\n`);
+      } else {
+        console.error(formatted);
+      }
+    } catch {
+      // Silently catch to prevent crashing during error handling (e.g. EPIPE on process.stderr)
     }
   }
 
