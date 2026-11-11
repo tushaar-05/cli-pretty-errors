@@ -192,6 +192,14 @@ import {
 
 ---
 
+## Known Limitations
+
+- **Minified Code without Source Maps**: When running production bundles where source files have been concatenated and variable names mangled, `cli-pretty-errors` formats the reported bundle coordinates accurately, but cannot unminify original variable names without an external source map consumer.
+- **Native C++ Addon Frames**: Errors originating directly inside native C++ bindings or N-API addons that do not generate standard V8 callsite strings will produce an empty `frames` array and fallback cleanly to standard message and error code display without source location coordinates.
+- **Getter Safety**: Any custom property backed by an active getter is omitted rather than evaluated to ensure error formatting never triggers unexpected side effects.
+
+---
+
 ## License
 
 [MIT](LICENSE)
